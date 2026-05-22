@@ -1,0 +1,23 @@
+.env
+.lab-state.json
+
+# Lab working directory — holds the cloned fork of ccw-inventory-management
+workspace/
+
+# Per-run telemetry logs
+runs/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# IDE
+.vscode/
+.idea/
+.DS_Store

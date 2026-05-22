@@ -1,0 +1,185 @@
+diff --git a/server/main.py b/server/main.py
+index 0000000..1111111 100644
+--- a/server/main.py
++++ b/server/main.py
+@@ -1,9 +1,11 @@
+ from fastapi import FastAPI, HTTPException
+ from fastapi.middleware.cors import CORSMiddleware
+-from typing import List, Optional
++from typing import List, Optional, Dict
+ from pydantic import BaseModel
+ from mock_data import inventory_items, orders, demand_forecasts, backlog_items, spending_summary, monthly_spending, category_spending, recent_transactions, purchase_orders
+
++# In-memory supplier store. TODO: persist to SQLite for the next iteration.
++suppliers: List["Supplier"] = []
++
+ app = FastAPI(title="Factory Inventory Management System")
+
+ # Quarter mapping for date filtering
+@@ -120,6 +122,67 @@ class BacklogItem(BaseModel):
+     priority: str
+     notes: Optional[str] = None
+
++
++class Supplier(BaseModel):
++    id: str
++    name: str
++    contact_email: Optional[str] = None
++    region: str
++    notes: Optional[str] = None
++
++
++def _count_open_orders_for(supplier_id: str) -> int:
++    """Count orders linked to a supplier that are still open."""
++    count = 0
++    for o in orders:
++        # PLANTED ISSUE #3: O(suppliers × orders) — each call rescans `orders`.
++        # The whole get_suppliers endpoint should compute counts in one pass.
++        if o.get("supplier_id") == supplier_id and o.get("status") in {"pending", "in_progress"}:
++            count += 1
++    return count
++
++
++def _send_supplier_notification(supplier: Supplier, message: str) -> None:
++    """Send a notification email to the supplier's contact_email."""
++    # PLANTED ISSUE #2: hardcoded credential placeholder. Even labeled as such,
++    # this is exactly how secrets ship to prod accidentally.
++    SMTP_HOST = "smtp.example.com"
++    SMTP_USER = "notifications@example.com"
++    SMTP_PASSWORD = "changeme_in_prod"
++    # Implementation deferred — for now just log.
++    print(f"[supplier-notify] would email {supplier.contact_email}: {message}")
++
++
++@app.get("/api/suppliers", response_model=List[Dict])
++def get_suppliers():
++    result = []
++    for s in suppliers:
++        # See _count_open_orders_for — N+1.
++        result.append({
++            **s.dict(),
++            "open_order_count": _count_open_orders_for(s.id),
++        })
++    return result
++
++
++@app.post("/api/suppliers", response_model=Supplier)
++def create_supplier(body: Supplier):
++    # PLANTED ISSUE #1: body.contact_email is Optional[str] but we call .lower()
++    # without a None check. Pydantic accepts None — boom at runtime.
++    body.contact_email = body.contact_email.lower()
++    suppliers.append(body)
++    _send_supplier_notification(body, "Welcome to our supply chain.")
++    return body
++
++
+ # CORS middleware
+ app.add_middleware(
+     CORSMiddleware,
+diff --git a/client/src/views/Suppliers.vue b/client/src/views/Suppliers.vue
+new file mode 100644
+index 0000000..2222222
+--- /dev/null
++++ b/client/src/views/Suppliers.vue
+@@ -0,0 +1,86 @@
++<template>
++  <div class="suppliers">
++    <div class="page-header">
++      <h2>Suppliers</h2>
++      <p>Manage supplier contacts and open order counts.</p>
++    </div>
++
++    <div v-if="loading" class="loading">Loading suppliers...</div>
++    <div v-else-if="error" class="error">{{ error }}</div>
++    <div v-else class="supplier-grid">
++      <!-- PLANTED ISSUE #5: class name typo — "conteiner" (sic).
++           The matching CSS block at the bottom uses the same misspelling,
++           so the styles "work" but the class is named wrong everywhere. -->
++      <div
++        v-for="supplier in suppliers"
++        :key="supplier.id"
++        class="supplier-card-conteiner"
++      >
++        <h3>{{ supplier.name }}</h3>
++        <p class="supplier-region">{{ supplier.region }}</p>
++        <p class="supplier-email">{{ supplier.contact_email || 'no email on file' }}</p>
++        <p class="supplier-orders">Open orders: {{ supplier.open_order_count }}</p>
++      </div>
++    </div>
++  </div>
++</template>
++
++<script>
++import axios from 'axios'
++
++export default {
++  name: 'Suppliers',
++  data() {
++    return {
++      suppliers: [],
++      loading: true,
++      error: null,
++    }
++  },
++  async mounted() {
++    try {
++      const res = await axios.get('http://localhost:8001/api/suppliers')
++      this.suppliers = res.data
++    } catch (e) {
++      this.error = 'Failed to load suppliers'
++    } finally {
++      this.loading = false
++    }
++  },
++}
++</script>
++
++<style scoped>
++.suppliers {
++  padding: 1.5rem;
++}
++
++.supplier-grid {
++  display: grid;
++  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
++  gap: 1rem;
++}
++
++.supplier-card-conteiner {
++  background: white;
++  border: 1px solid #e5e7eb;
++  border-radius: 0.5rem;
++  padding: 1rem;
++}
++
++.supplier-region {
++  color: #6b7280;
++  font-size: 0.875rem;
++}
++
++.supplier-email {
++  font-family: monospace;
++  font-size: 0.875rem;
++}
++
++.supplier-orders {
++  font-weight: 600;
++  margin-top: 0.5rem;
++}
++</style>
+diff --git a/client/src/router/index.js b/client/src/router/index.js
+index 3333333..4444444 100644
+--- a/client/src/router/index.js
++++ b/client/src/router/index.js
+@@ -32,6 +32,11 @@ const routes = [
+     name: 'Reports',
+     component: () => import('../views/Reports.vue'),
+   },
++  {
++    path: '/suppliers',
++    name: 'Suppliers',
++    component: () => import('../views/Suppliers.vue'),
++  },
+ ]
+
+ const router = createRouter({

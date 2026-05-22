@@ -1,0 +1,34 @@
+[project]
+name = "ccw-agentic-system-lab"
+version = "0.1.0"
+description = "Hands-on lab: build a dual-mode PR & Issue Concierge with the Claude Agent SDK"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Provectus AI Engineering" }]
+dependencies = [
+    "claude-agent-sdk>=0.0.20",
+    "anyio>=4.4",
+    "httpx>=0.27",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2",
+    "pytest-asyncio>=0.23",
+]
+
+[project.scripts]
+agent = "agent.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["agent"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
