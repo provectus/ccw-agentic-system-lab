@@ -1,4 +1,4 @@
-"""Review mode — TODO scaffold (workshop step 9).
+"""PR Review mode (`review` command) — TODO scaffold (workshop step 9).
 
 You are implementing the **orchestrator-workers** pattern:
 
@@ -80,7 +80,7 @@ async def run(cfg: RunConfig) -> int:
         #     github_tools.gh_pr_comment(cfg.url, item.path, item.line, item.body, dry_run=cfg.dry_run)
 
         print(
-            "Review mode is not implemented yet. See agent/modes/review.py for TODOs.\n"
+            "PR Review mode is not implemented yet. See agent/modes/review.py for TODOs.\n"
             "Refer to workshop step 9 in claudesdk-agentic-system-lab.json."
         )
         telemetry.run_end(status="not_implemented")

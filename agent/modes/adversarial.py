@@ -1,6 +1,6 @@
 """Adversarial mode — BONUS walkthrough (workshop step 14, no points).
 
-Run the same triage problem through three Patcher invocations with different
+Run the same Issue Resolution (`triage`) problem through three Patcher invocations with different
 personas, then have a Judge (Opus) pick the best fix. This is primarily
 a guided reading; the canonical walkthrough is the Boris Cherny / Jared Sumner
 demo: https://www.youtube.com/watch?v=DlTCu_pNDHE&list=PLmWCw1CzcFim2obQ-w3ohbULOfwp5lApR&index=4
@@ -11,7 +11,7 @@ Personas (define these in prompts/patcher.md or inline below):
     - conservative: prefers the smallest possible diff; no refactors
 
 Skeleton steps:
-    1. Read the issue (router/planner reuse from triage mode).
+    1. Read the issue (router/planner reuse from Issue Resolution mode, `triage`).
     2. Run 3 patchers in parallel with persona variants of the same prompt.
     3. Run a Judge agent (Opus, persona = "neutral senior reviewer") on the 3
        diffs side-by-side; ask for {"winner": int, "rationale": str}.

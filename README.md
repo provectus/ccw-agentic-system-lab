@@ -5,8 +5,8 @@
 
 In this lab you build an agent that operates against a real fork of [`provectus/ccw-inventory-management`](https://github.com/provectus/ccw-inventory-management) in two modes:
 
-- **Review mode** — given a PR URL, the agent fans out per-file reviewers, synthesizes findings, and posts an inline review.
-- **Triage mode** — given an issue URL, the agent plans a fix, applies patches, runs tests, and opens a draft PR.
+- **PR Review mode** (`review` command) — given a PR URL, the agent fans out per-file reviewers, synthesizes findings, and posts an inline review.
+- **Issue Resolution mode** (`triage` command) — given an issue URL, the agent plans a fix, applies patches, runs tests, and opens a draft PR.
 
 The scaffold provides the tedious parts (tool wrappers, SDK loop, telemetry, fixtures, setup script). **You write the parts where pedagogy matters**: the prompts, the orchestration in `agent/modes/*.py`, and the design document in `docs/design.md`.
 

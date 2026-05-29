@@ -1,4 +1,4 @@
-"""Triage mode — TODO scaffold (workshop step 11).
+"""Issue Resolution mode (`triage` command) — TODO scaffold (workshop step 11).
 
 You are implementing a **sequential pipeline** with intra-step parallelism:
 
@@ -83,7 +83,7 @@ async def run(cfg: RunConfig) -> int:
         # )
 
         print(
-            "Triage mode is not implemented yet. See agent/modes/triage.py for TODOs.\n"
+            "Issue Resolution mode is not implemented yet. See agent/modes/triage.py for TODOs.\n"
             "Refer to workshop step 11 in claudesdk-agentic-system-lab.json."
         )
         telemetry.run_end(status="not_implemented")
