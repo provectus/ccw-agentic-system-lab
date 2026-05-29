@@ -33,7 +33,7 @@ The Critic is the **advisor** pattern from Building Effective Agents. In step 13
 
 The defaults in `agent/config.py` reflect the consensus rationale:
 
-| Role | Model | Reasoning |
+| Role | Default Model | Reasoning |
 |---|---|---|
 | Router | Haiku | Classification + URL parsing. Cheap, fast, no reasoning needed. |
 | Coordinator | Sonnet | Light planning. Sonnet handles "split N files into M work units" easily. |
@@ -43,7 +43,7 @@ The defaults in `agent/config.py` reflect the consensus rationale:
 | Critic | Opus | The whole point of the critic is "would a senior reviewer ship this?" Use the smartest model. |
 | Synthesizer | Sonnet | Merging structured worker outputs into prose. Sonnet is fine. |
 
-**Cost guidance**: a typical PR review with these defaults is ~$1-2 per run. Downgrading Reviewer from Opus to Sonnet drops to ~$0.30 with a measurable quality hit. Don't.
+**Cost guidance**: a typical PR review with these defaults is ~$1-2 per run. Downgrading Reviewer from Opus to Sonnet drops to ~$0.30 with a measurable quality hit. Probably not worth it.
 
 ---
 
