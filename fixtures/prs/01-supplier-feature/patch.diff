@@ -1,87 +1,31 @@
-diff --git a/server/main.py b/server/main.py
-index 0000000..1111111 100644
---- a/server/main.py
-+++ b/server/main.py
-@@ -1,9 +1,11 @@
- from fastapi import FastAPI, HTTPException
- from fastapi.middleware.cors import CORSMiddleware
--from typing import List, Optional
-+from typing import List, Optional, Dict
- from pydantic import BaseModel
- from mock_data import inventory_items, orders, demand_forecasts, backlog_items, spending_summary, monthly_spending, category_spending, recent_transactions, purchase_orders
-
-+# In-memory supplier store. TODO: persist to SQLite for the next iteration.
-+suppliers: List["Supplier"] = []
-+
- app = FastAPI(title="Factory Inventory Management System")
-
- # Quarter mapping for date filtering
-@@ -120,6 +122,67 @@ class BacklogItem(BaseModel):
-     priority: str
-     notes: Optional[str] = None
-
-+
-+class Supplier(BaseModel):
-+    id: str
-+    name: str
-+    contact_email: Optional[str] = None
-+    region: str
-+    notes: Optional[str] = None
-+
-+
-+def _count_open_orders_for(supplier_id: str) -> int:
-+    """Count orders linked to a supplier that are still open."""
-+    count = 0
-+    for o in orders:
-+        # PLANTED ISSUE #3: O(suppliers × orders) — each call rescans `orders`.
-+        # The whole get_suppliers endpoint should compute counts in one pass.
-+        if o.get("supplier_id") == supplier_id and o.get("status") in {"pending", "in_progress"}:
-+            count += 1
-+    return count
-+
-+
-+def _send_supplier_notification(supplier: Supplier, message: str) -> None:
-+    """Send a notification email to the supplier's contact_email."""
-+    # PLANTED ISSUE #2: hardcoded credential placeholder. Even labeled as such,
-+    # this is exactly how secrets ship to prod accidentally.
-+    SMTP_HOST = "smtp.example.com"
-+    SMTP_USER = "notifications@example.com"
-+    SMTP_PASSWORD = "changeme_in_prod"
-+    # Implementation deferred — for now just log.
-+    print(f"[supplier-notify] would email {supplier.contact_email}: {message}")
-+
-+
-+@app.get("/api/suppliers", response_model=List[Dict])
-+def get_suppliers():
-+    result = []
-+    for s in suppliers:
-+        # See _count_open_orders_for — N+1.
-+        result.append({
-+            **s.dict(),
-+            "open_order_count": _count_open_orders_for(s.id),
-+        })
-+    return result
-+
-+
-+@app.post("/api/suppliers", response_model=Supplier)
-+def create_supplier(body: Supplier):
-+    # PLANTED ISSUE #1: body.contact_email is Optional[str] but we call .lower()
-+    # without a None check. Pydantic accepts None — boom at runtime.
-+    body.contact_email = body.contact_email.lower()
-+    suppliers.append(body)
-+    _send_supplier_notification(body, "Welcome to our supply chain.")
-+    return body
-+
-+
- # CORS middleware
- app.add_middleware(
-     CORSMiddleware,
+diff --git a/client/src/main.js b/client/src/main.js
+index 477c2d9..7d10333 100644
+--- a/client/src/main.js
++++ b/client/src/main.js
+@@ -7,6 +7,7 @@ import Orders from './views/Orders.vue'
+ import Demand from './views/Demand.vue'
+ import Spending from './views/Spending.vue'
+ import Reports from './views/Reports.vue'
++import Suppliers from './views/Suppliers.vue'
+ 
+ const router = createRouter({
+   history: createWebHistory(),
+@@ -16,7 +17,8 @@ const router = createRouter({
+     { path: '/orders', component: Orders },
+     { path: '/demand', component: Demand },
+     { path: '/spending', component: Spending },
+-    { path: '/reports', component: Reports }
++    { path: '/reports', component: Reports },
++    { path: '/suppliers', component: Suppliers }
+   ]
+ })
+ 
 diff --git a/client/src/views/Suppliers.vue b/client/src/views/Suppliers.vue
 new file mode 100644
-index 0000000..2222222
+index 0000000..a1af6c9
 --- /dev/null
 +++ b/client/src/views/Suppliers.vue
-@@ -0,0 +1,86 @@
+@@ -0,0 +1,82 @@
 +<template>
 +  <div class="suppliers">
 +    <div class="page-header">
@@ -92,9 +36,6 @@ index 0000000..2222222
 +    <div v-if="loading" class="loading">Loading suppliers...</div>
 +    <div v-else-if="error" class="error">{{ error }}</div>
 +    <div v-else class="supplier-grid">
-+      <!-- PLANTED ISSUE #5: class name typo — "conteiner" (sic).
-+           The matching CSS block at the bottom uses the same misspelling,
-+           so the styles "work" but the class is named wrong everywhere. -->
 +      <div
 +        v-for="supplier in suppliers"
 +        :key="supplier.id"
@@ -167,19 +108,69 @@ index 0000000..2222222
 +  margin-top: 0.5rem;
 +}
 +</style>
-diff --git a/client/src/router/index.js b/client/src/router/index.js
-index 3333333..4444444 100644
---- a/client/src/router/index.js
-+++ b/client/src/router/index.js
-@@ -32,6 +32,11 @@ const routes = [
-     name: 'Reports',
-     component: () => import('../views/Reports.vue'),
-   },
-+  {
-+    path: '/suppliers',
-+    name: 'Suppliers',
-+    component: () => import('../views/Suppliers.vue'),
-+  },
- ]
-
- const router = createRouter({
+diff --git a/server/main.py b/server/main.py
+index a0c2d8c..80d5d94 100644
+--- a/server/main.py
++++ b/server/main.py
+@@ -304,6 +304,61 @@ def get_monthly_trends():
+     result.sort(key=lambda x: x['month'])
+     return result
+ 
++
++# ---------------------------------------------------------------------------
++# Supplier management (planted PR for the agentic system lab)
++# ---------------------------------------------------------------------------
++
++class Supplier(BaseModel):
++    id: str
++    name: str
++    contact_email: Optional[str] = None
++    region: str
++    notes: Optional[str] = None
++
++
++# In-memory supplier store. TODO: persist to SQLite for the next iteration.
++suppliers: List[Supplier] = []
++
++
++def _count_open_orders_for(supplier_id: str) -> int:
++    """Count orders linked to a supplier that are still open."""
++    count = 0
++    for o in orders:
++        # Rescans the full orders list for every supplier — O(suppliers * orders).
++        if o.get("supplier_id") == supplier_id and o.get("status") in {"pending", "in_progress"}:
++            count += 1
++    return count
++
++
++def _send_supplier_notification(supplier: Supplier, message: str) -> None:
++    """Send a notification email to the supplier's contact_email."""
++    SMTP_HOST = "smtp.example.com"
++    SMTP_USER = "notifications@example.com"
++    SMTP_PASSWORD = "changeme_in_prod"
++    # Implementation deferred — for now just log.
++    print(f"[supplier-notify] would email {supplier.contact_email}: {message}")
++
++
++@app.get("/api/suppliers")
++def get_suppliers():
++    result = []
++    for s in suppliers:
++        result.append({
++            **s.dict(),
++            "open_order_count": _count_open_orders_for(s.id),
++        })
++    return result
++
++
++@app.post("/api/suppliers", response_model=Supplier)
++def create_supplier(body: Supplier):
++    body.contact_email = body.contact_email.lower()
++    suppliers.append(body)
++    _send_supplier_notification(body, "Welcome to our supply chain.")
++    return body
++
++
+ if __name__ == "__main__":
+     import uvicorn
+     uvicorn.run(app, host="0.0.0.0", port=8001)

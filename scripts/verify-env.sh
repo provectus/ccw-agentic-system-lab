@@ -42,6 +42,13 @@ else
   red "gh not on PATH. Install: https://cli.github.com/"
 fi
 
+# 3b. jq (used by setup-lab.sh and teardown.sh for JSON parsing)
+if command -v jq >/dev/null 2>&1; then
+  green "jq $(jq --version | sed 's/^jq-//')"
+else
+  red "jq not on PATH. Install: brew install jq (macOS) or apt install jq (Linux)"
+fi
+
 # 4. ANTHROPIC_API_KEY
 if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
   green "ANTHROPIC_API_KEY is set"

@@ -68,7 +68,17 @@ heading "Step 2: fork $UPSTREAM (skip if it exists)"
 if gh repo view "$FORK" >/dev/null 2>&1; then
   echo "  fork $FORK already exists, skipping."
 else
-  announce gh repo fork "$UPSTREAM" --clone=false --remote=false
+  announce gh repo fork "$UPSTREAM" --clone=false
+fi
+
+# GitHub disables issues on forks by default. The triage step needs to open a
+# canned issue, so enable issues on the fork now (idempotent).
+heading "Step 2b: enable issues on fork (needed for triage mode)"
+issues_enabled=$(gh repo view "$FORK" --json hasIssuesEnabled --jq .hasIssuesEnabled 2>/dev/null || echo "false")
+if [[ "$issues_enabled" == "true" ]]; then
+  echo "  issues already enabled on $FORK."
+else
+  announce gh repo edit "$FORK" --enable-issues
 fi
 
 # 3. Clone fork
@@ -82,6 +92,11 @@ fi
 
 # 4. Create branch
 heading "Step 4: create branch $BRANCH from main"
+# Reset the workspace clone to a clean state in case a previous run died with
+# the working tree dirty (e.g. mid-patch-apply). The workspace is owned by this
+# script — no user work to preserve.
+announce "git -C '$TARGET' reset --hard HEAD"
+announce "git -C '$TARGET' clean -fd"
 announce "git -C '$TARGET' fetch origin main"
 announce "git -C '$TARGET' checkout main"
 announce "git -C '$TARGET' pull --ff-only origin main"
@@ -99,7 +114,11 @@ announce "git -C '$TARGET' apply --whitespace=fix '$PATCH'"
 heading "Step 6: commit and push $BRANCH"
 announce "git -C '$TARGET' add -A"
 announce "git -C '$TARGET' commit -m 'feat: add supplier management (planted PR for lab)'"
-announce "git -C '$TARGET' push -u origin '$BRANCH'"
+# Fetch the remote branch (if it exists) so --force-with-lease has a reference
+# point. The lab branch is owned by this script; force-with-lease protects
+# against the unlikely case of a concurrent push without the risk of plain --force.
+announce "git -C '$TARGET' fetch origin '$BRANCH' 2>/dev/null || true"
+announce "git -C '$TARGET' push --force-with-lease -u origin '$BRANCH'"
 
 # 7. Open draft PR
 heading "Step 7: open draft PR"
@@ -110,12 +129,19 @@ This is the lab's planted PR for the CCW Agentic System workshop. See agent/prom
 
 PR_URL=""
 if [[ $DRY_RUN -eq 0 ]]; then
-  PR_URL=$(gh pr create \
-    --repo "$FORK" \
-    --head "$BRANCH" --base main --draft \
-    --title "$PR_TITLE" \
-    --body "$PR_BODY")
-  echo "  PR opened: $PR_URL"
+  # Reuse an existing PR for this branch if one is already open (idempotent re-run).
+  existing_pr=$(gh pr list --repo "$FORK" --head "$BRANCH" --state open --json url --jq '.[0].url' 2>/dev/null || echo "")
+  if [[ -n "$existing_pr" && "$existing_pr" != "null" ]]; then
+    PR_URL="$existing_pr"
+    echo "  PR already exists for $BRANCH: $PR_URL"
+  else
+    PR_URL=$(gh pr create \
+      --repo "$FORK" \
+      --head "$BRANCH" --base main --draft \
+      --title "$PR_TITLE" \
+      --body "$PR_BODY")
+    echo "  PR opened: $PR_URL"
+  fi
 else
   printf "\033[36m$\033[0m gh pr create --repo %s --head %s --base main --draft --title %s --body ...\n" "$FORK" "$BRANCH" "$PR_TITLE"
 fi
@@ -131,11 +157,20 @@ ISSUE_BODY=$(awk '/^---$/{c++; next} c==2{print}' "$LAB_ROOT/$ISSUE_FIXTURE")
 
 ISSUE_URL=""
 if [[ $DRY_RUN -eq 0 ]]; then
-  ISSUE_URL=$(gh issue create \
-    --repo "$FORK" \
-    --title "$ISSUE_TITLE" \
-    --body "$ISSUE_BODY")
-  echo "  Issue opened: $ISSUE_URL"
+  # Reuse an existing open issue with the same title (idempotent re-run).
+  # Using jq --arg avoids shell-escape pitfalls with backticks/quotes in titles.
+  existing_issue=$(gh issue list --repo "$FORK" --state open --json url,title \
+    | jq -r --arg t "$ISSUE_TITLE" '.[] | select(.title == $t) | .url' | head -n 1)
+  if [[ -n "$existing_issue" ]]; then
+    ISSUE_URL="$existing_issue"
+    echo "  Issue already open: $ISSUE_URL"
+  else
+    ISSUE_URL=$(gh issue create \
+      --repo "$FORK" \
+      --title "$ISSUE_TITLE" \
+      --body "$ISSUE_BODY")
+    echo "  Issue opened: $ISSUE_URL"
+  fi
 else
   printf "\033[36m$\033[0m gh issue create --repo %s --title %s --body ...\n" "$FORK" "$ISSUE_TITLE"
 fi
